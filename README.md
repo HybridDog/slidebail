@@ -1,3 +1,2 @@
 TODO:  
-— better textures  
-— fix code
+— better textures

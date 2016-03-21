@@ -1,8 +1,6 @@
 local load_time_start = os.clock()
 
-
-local friction_strength = 0.1
-local grav_acc = 9.81
+local grav_acc = tonumber(minetest.setting_get("movement_gravity")) or 9.81
 
 -- needs to work in unloaded chunks
 local function get_node_hard(pos)
@@ -14,21 +12,35 @@ local function get_node_hard(pos)
 	return node
 end
 
+-- tests if the node is walkable
+local solids = {}
+local function is_walkable(name)
+	if solids[name] ~= nil then
+		return solids[name]
+	end
+	local solid = minetest.registered_nodes[name]
+	if not solid then
+		solids[name] = true
+		return true
+	end
+	solid = solid.walkable ~= false
+	solids[name] = solid
+	return solid
+end
+
 -- tests if there's a carrier and free space
 local function can_slide(pos)
 	local node = get_node_hard(pos)
-	if node.name ~= "slidebail:carrier" then
-		return false
-	end
-	-- todo: test walkable, not air here
-	if get_node_hard({x=pos.x, y=pos.y-1, z=pos.z}).name ~= "air"
-	or get_node_hard({x=pos.x, y=pos.y-2, z=pos.z}).name ~= "air" then
+	if node.name ~= "slidebail:carrier"
+	or is_walkable(get_node_hard({x=pos.x, y=pos.y-1, z=pos.z}).name)
+	or is_walkable(get_node_hard({x=pos.x, y=pos.y-2, z=pos.z}).name) then
 		return false
 	end
 	return true
 end
 
 local obrt2 = 1/math.sqrt(2)
+-- the entity used for sliding
 minetest.register_entity("slidebail:entity", {
 	collisionbox = {0,0,0,0,0,0},
 	textures = {
@@ -41,6 +53,7 @@ minetest.register_entity("slidebail:entity", {
 
 	passed = 0,
 	on_step = function(self)
+		-- abort if sth is wrong with the object
 		if not self.startpos
 		or not self.dir
 		or not self.pname then
@@ -53,9 +66,9 @@ minetest.register_entity("slidebail:entity", {
 		local pos = self.object:getpos()
 		local xcoord = next(self.dir)
 
-		local x = math.floor(pos[xcoord]+0.5)
-		local passing = math.abs(x - startpos[xcoord])
+		local passing = math.abs(math.floor(pos[xcoord]+0.5) - startpos[xcoord])
 
+		-- abort if the player doesn't exist
 		local player = minetest.get_player_by_name(self.pname)
 		if not player then
 			minetest.log("error", "[slidebail] missing player")
@@ -64,15 +77,17 @@ minetest.register_entity("slidebail:entity", {
 		end
 
 		local xvalue = self.dir[xcoord]
-		if passing ~= self.passed then
-			local y = startpos.y - passing
 
-			if math.floor(pos.y - y + 0.5) ~= 0 then
+		-- do sth if it moved to the next carrier
+		if passing ~= self.passed then
+			-- abort if the object is where it shouldn't be
+			if math.abs(math.floor(pos.y - startpos.y + 0.5)) ~= passing then
 				minetest.log("error", "[slidebail] unexpected object position")
 				self.object:remove()
 				return
 			end
 
+			-- stop if sliding isn't longer possible
 			local lp = vector.new(startpos)
 			for i = self.passed, passing do
 				lp[xcoord] = startpos[xcoord] + i * xvalue
@@ -95,28 +110,27 @@ minetest.register_entity("slidebail:entity", {
 			self.passed = passing
 		end
 
+		-- update acceleration
 		local accdir = {x=0, y=-obrt2, z=0}
 		accdir[xcoord] = xvalue * obrt2
-
-		-- braking just testing
-		local braking = friction_strength / math.max(
-			0.5 - 2 * player:get_look_pitch() / math.pi,
-			0.01 * friction_strength
-		)
-		--minetest.chat_send_all(braking)
-
 		self.object:setacceleration(
 			vector.multiply(
 				accdir,
-				grav_acc - self.object:getvelocity()[xcoord] * xvalue * braking
+				grav_acc
+					- self.object:getvelocity()[xcoord]
+						* xvalue
+						* 50
+						* math.abs(0.25 + player:get_look_pitch() / math.pi)
 			)
 		)
 	end,
+	-- do not store object
 	on_serialize = function(self)
 		self.object:remove()
 	end,
 })
 
+-- returns information about the direction for the slidebail
 local function get_carrier_dir(par2)
 	par2 = par2 % 4
 
@@ -134,6 +148,7 @@ local function get_carrier_dir(par2)
 	end
 end
 
+-- the item for the inventory
 minetest.register_craftitem("slidebail:item", {
 	description = "Slidebail",
 	inventory_image = "slidebail.png",
@@ -145,18 +160,17 @@ minetest.register_craftitem("slidebail:item", {
 		end
 
 		local pos = pt.under
-		--[[
-		if pos.y ~= pt.above.y + 1 then
-			return
-		end--]]
-
 		local carrier = minetest.get_node(pos)
+
+		-- abort if the click didn't happen on a carrier
 		if carrier.name ~= "slidebail:carrier" then
 			return
 		end
 
+		-- abort if the player is already attached
 		local attach = player:get_attach()
 		if attach then
+			-- if using a slidebail, stop sliding
 			local luaentity = attach:get_luaentity()
 			if luaentity.name == "slidebail:entity" then
 				local pos = attach:getpos()
@@ -169,6 +183,8 @@ minetest.register_craftitem("slidebail:item", {
 			end
 			return
 		end
+
+		-- start sliding
 		local pname = player:get_player_name()
 
 		local dir,yaw = get_carrier_dir(carrier.param2)
@@ -194,6 +210,7 @@ minetest.register_craftitem("slidebail:item", {
 	end
 })
 
+-- the carrier used for leading the entity
 minetest.register_node("slidebail:carrier", {
 	description = "Slidebail Carrier",
 	drawtype = "nodebox",
