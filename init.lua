@@ -101,6 +101,8 @@ minetest.register_entity("slidebail:entity", {
 						player:moveto(pos)
 					end, player, lp)
 
+					minetest.sound_play("slidebail_set", {pos = lp})
+
 					return
 				end
 			end
@@ -180,6 +182,7 @@ minetest.register_craftitem("slidebail:item", {
 					player:moveto(pos)
 				end, player, pos)
 				player:set_eye_offset({x=0,y=0,z=0}, {x=0,y=0,z=0})
+				minetest.sound_play("slidebail_set", {pos = pos})
 			end
 			return
 		end
@@ -189,10 +192,12 @@ minetest.register_craftitem("slidebail:item", {
 
 		local dir,yaw = get_carrier_dir(carrier.param2)
 
-		local spawnpos = vector.new(pos)
+		minetest.sound_play("slidebail_set", {pos = pos})
+
+		--local spawnpos = vector.new(pos)
 		--spawnpos.y = spawnpos.y - 0.5
 
-		local obj = minetest.add_entity(spawnpos, "slidebail:entity")
+		local obj = minetest.add_entity(pos, "slidebail:entity")
 		obj:setyaw(yaw)
 
 		local ent = obj:get_luaentity()
