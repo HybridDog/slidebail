@@ -1,4 +1,4 @@
-local load_time_start = os.clock()
+local load_time_start = minetest.get_us_time()
 
 local grav_acc = tonumber(minetest.setting_get("movement_gravity")) or 9.81
 
@@ -39,7 +39,7 @@ local function can_slide(pos)
 	return true
 end
 
-local obrt2 = 1/math.sqrt(2)
+local obrt2 = 2^-0.5 -- works faster than 1/sqrt(2)
 -- the entity used for sliding
 minetest.register_entity("slidebail:entity", {
 	collisionbox = {0,0,0,0,0,0},
@@ -237,9 +237,9 @@ minetest.register_node("slidebail:carrier", {
 })
 
 
-local time = math.floor(tonumber(os.clock()-load_time_start)*100+0.5)/100
+local time = (minetest.get_us_time()-load_time_start)/1000000
 local msg = "[slidebail] loaded after ca. "..time
-if time > 0.05 then
+if time > 0.01 then
 	print(msg)
 else
 	minetest.log("info", msg)
